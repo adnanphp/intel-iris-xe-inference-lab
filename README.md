@@ -1,399 +1,639 @@
-# Intel Iris Xe Inference Lab
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![OpenVINO](https://img.shields.io/badge/OpenVINO-2024.6-0a7aff.svg)](https://docs.openvino.ai/)
-[![Platform](https://img.shields.io/badge/platform-Intel%20Iris%20Xe-0071c5.svg)](#hardware)
+# ⚡ Intel Iris Xe Inference Lab
 
-Benchmarking and optimizing deep learning inference on Intel Iris Xe
-integrated graphics with OpenVINO — CPU vs GPU, batch sizes, async
-pipelining, multiprocess scaling, and cross-model comparison.
+### Hardware-Aware Deep Learning Inference Optimization with OpenVINO
 
-**Clone URL:** `https://github.com/adnanphp/intel-iris-xe-inference-lab.git`
+**Benchmarking • Quantization • GPU Acceleration • Parallel Inference • Performance Engineering**
+
+<br/>
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![OpenVINO](https://img.shields.io/badge/OpenVINO-2024.6-0071C5?style=for-the-badge)](https://docs.openvino.ai/)
+[![Intel](https://img.shields.io/badge/Hardware-Iris%20Xe-0071C5?style=for-the-badge&logo=intel&logoColor=white)](https://www.intel.com/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
+<br/>
+
+**Can an integrated GPU outperform a CPU?**
+
+Not always. This project investigates when, why, and by how much different inference configurations outperform each other on real consumer hardware.
+
+<br/>
+
+[Explore Results](#-benchmark-results) •
+[Installation](#-installation) •
+[Run Experiments](#-running-the-experiments) •
+[Roadmap](#-roadmap)
+
+<br/>
+
+</div>
 
 ---
 
-## Hardware
+## 🧠 Project Overview
+
+Deep learning inference optimization is not simply about moving workloads from CPU to GPU.
+
+Performance depends on several interacting factors:
+
+- Model architecture
+- Hardware capabilities
+- Batch size
+- Numerical precision
+- Memory bandwidth
+- Threading and concurrency
+- Runtime implementation
+
+This project builds a reproducible benchmarking and inference environment using **Intel OpenVINO** to investigate these factors on an Intel Iris Xe integrated GPU.
+
+Rather than assuming GPU acceleration is always beneficial, the experiments compare actual execution performance across different configurations.
+
+### 🎯 Research Objectives
+
+| Area | Investigation |
+|---|---|
+| Hardware acceleration | Intel CPU vs Iris Xe GPU |
+| Batch optimization | Batch sizes 1, 2, 4, 8 and 16 |
+| Async inference | Multiple concurrent inference requests |
+| Multiprocessing | Scaling inference across worker processes |
+| Quantization | FP16 vs INT8 performance |
+| Model architecture | Face Detection vs MobileNetV3 |
+| Practical deployment | Batch image inference with bounding boxes |
+| Performance analysis | Latency, throughput, P95, P99 and speedup |
+
+---
+
+## 🏆 Key Experimental Findings
+
+The experiments revealed several interesting characteristics of integrated GPU inference.
+
+<div align="center">
+
+| 🚀 Metric | Experimental Result |
+|---|---:|
+| Best GPU speedup | **2.32×** |
+| Best GPU throughput | **348 images/sec** |
+| Best overall throughput | **375 images/sec** |
+| Best INT8 CPU throughput | **1,077 images/sec** |
+| Best INT8 GPU throughput | **719 images/sec** |
+| Best multiprocessing configuration | **4 workers** |
+
+</div>
+
+*Results are hardware-specific and represent the measured configurations in this project.*
+
+### 🔥 Performance Highlights
+
+**1. GPU acceleration is batch-dependent**
+
+The face-detection model achieved approximately 2.32× GPU speedup at batch size 8.
+
+**2. Multiprocessing improves aggregate throughput**
+
+Four GPU worker processes achieved approximately 375 images/sec, outperforming the synchronous and asynchronous configurations.
+
+**3. Model architecture changes the outcome**
+
+MobileNetV3-Large performed better on CPU than GPU across all tested batch sizes.
+
+**4. INT8 quantization significantly improves CPU inference**
+
+MobileNetV3 INT8 achieved 1,077 images/sec on CPU at batch size 8.
+
+**5. Hardware-aware optimization matters**
+
+The fastest configuration is determined by the combination of model architecture, precision, batch size and execution device.
+
+---
+
+## 💻 Hardware Environment
+
+All experiments were conducted on a consumer laptop rather than a dedicated GPU workstation.
 
 | Component | Specification |
 |---|---|
-| CPU | Intel Core i5-1135G7 (11th Gen, 4 cores / 8 threads) |
-| GPU | Intel Iris Xe Graphics (integrated, shares system RAM) |
-| RAM | ~7 GB available |
-| OS | Ubuntu 26.04 LTS (64-bit) |
+| CPU | Intel Core i5-1135G7 |
+| Generation | 11th Generation |
+| CPU Configuration | 4 Cores / 8 Threads |
+| GPU | Intel Iris Xe Graphics |
+| GPU Architecture | Integrated Graphics |
+| Available RAM | Approximately 7 GB |
+| Operating System | Ubuntu 26.04 LTS (64-bit) |
 | Desktop | XFCE 4.20 |
-| Framework | OpenVINO 2024.6.0 |
+| Inference Engine | OpenVINO 2024.6.0 |
 | Python | 3.12 |
 
-The key constraint: the GPU is **integrated**, so it shares the same
-~7 GB of system memory as the CPU. There is no dedicated VRAM.
+### ⚙️ An Important Hardware Constraint
+
+Unlike dedicated GPUs, Intel Iris Xe uses shared system memory.
+
+This means the CPU and GPU compete for the same available RAM and memory bandwidth.
+
+Consequently, GPU acceleration is not guaranteed to improve performance.
+
+This hardware constraint makes the project particularly useful for understanding real-world inference optimization on resource-limited systems.
 
 ---
 
-## What this project investigates
+## 📊 Benchmark Results
 
-The central question is not "is the GPU faster?" — it's **"under what
-conditions is the GPU faster, and by how much?"** The answer turns out
-to be highly model-dependent.
+### 1. CPU vs GPU — Face Detection
 
-Concretely, the project measures:
+Model: `face-detection-retail-0004`
 
-1. **CPU vs GPU latency and throughput** across batch sizes 1–16.
-2. **Async pipelining** — does keeping multiple requests in flight
-   improve GPU throughput?
-3. **Multiprocess scaling** — does running N worker processes beat a
-   single process?
-4. **Cross-model comparison** — is the CPU/GPU winner the same for
-   different network architectures?
+Input shape: `[N, 3, 300, 300]`
 
----
+| Batch | CPU Latency | GPU Latency | CPU Throughput | GPU Throughput | GPU Speedup |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 3.33 ms | 3.42 ms | 301 | 293 | 0.97× |
+| 2 | 6.98 ms | 6.49 ms | 287 | 308 | 1.07× |
+| 4 | 20.21 ms | 11.49 ms | 198 | 348 | **1.76×** |
+| 8 | 57.50 ms | 24.76 ms | 139 | 323 | **2.32×** |
+| 16 | 122.75 ms | 53.28 ms | 130 | 300 | **2.30×** |
 
-## Project structure
-intel-iris-xe-inference-lab/
-├── benchmarks/
-│ ├── run_benchmark.py # single (device, batch) benchmark
-│ ├── sweep.py # YAML-driven benchmark matrix
-│ ├── parallel_benchmark.py # sync / async / multiprocess modes
-│ ├── plot_results.py # latency/throughput/speedup plots
-│ ├── plot_parallel.py # parallel scaling plots
-│ └── compare_models.py # cross-model comparison table + plot
-├── config/
-│ └── benchmark_config.yaml
-├── model/ # OpenVINO IR models (not committed)
-├── results/ # CSV outputs and plots (not committed)
-├── docs/
-├── requirements.txt
-└── README.md
+*Throughput is measured in images/sec.*
 
-text
+**Observation:**
 
----
+The GPU becomes substantially more effective as batch size increases.
 
-## Installation
+The CPU experiences declining throughput at larger batch sizes, while the GPU maintains relatively stable throughput.
 
-```bash
-git clone https://github.com/adnanphp/intel-iris-xe-inference-lab.git
-cd intel-iris-xe-inference-lab
+### 2. Parallel Inference — Throughput Scaling
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-requirements.txt:
+Face-detection model, batch size 1.
 
-text
-openvino>=2024.6.0
-numpy>=1.24
-matplotlib>=3.5
-pyyaml>=6.0
-Models
-The OpenVINO IR model files (.xml + .bin) are not committed to the
-repository. Download them separately:
+| Execution Strategy | Workers | Throughput |
+|---|---:|---:|
+| Synchronous | 1 | 269–290 img/s |
+| Asynchronous | 2 | 332 img/s |
+| Asynchronous | 4 | 317 img/s |
+| Asynchronous | 8 | 318 img/s |
+| Multiprocessing | 2 | 339 img/s |
+| Multiprocessing | 4 | **375 img/s** |
+| Multiprocessing | 6 | 366 img/s |
+| Multiprocessing | 8 | 364 img/s |
 
-Face detection (face-detection-retail-0004, input [N,3,300,300]):
+**Observation:**
 
-bash
-cd model
-wget https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.xml
-wget https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.bin
-MobileNetV3-Large (mobilenet-v3-large-1.0-224-tf, input [N,3,224,224]):
+Multiprocessing with four workers achieved the highest aggregate throughput.
 
-bash
-cd model
-wget https://huggingface.co/OpenVINO/mobilenet_v3_large-fp16-ov/resolve/main/mobilenet_v3_large.xml -O mobilenet-v3-large-1.0-224-tf.xml
-wget https://huggingface.co/OpenVINO/mobilenet_v3_large-fp16-ov/resolve/main/mobilenet_v3_large.bin -O mobilenet-v3-large-1.0-224-tf.bin
-Usage
-Verify the GPU is available
-bash
-python3 -c "import openvino as ov; print(ov.Core().available_devices)"
-# -> ['CPU', 'GPU']
-Single benchmark
-bash
-python3 benchmarks/run_benchmark.py \
-  --model model/face-detection-retail-0004.xml \
-  --device GPU --batch-size 8 --iterations 50 \
-  --input-shape 3,300,300 \
-  --csv results/benchmark_results.csv
-Full batch-size sweep (YAML-driven)
-bash
-python3 benchmarks/sweep.py --csv results/sweep_python.csv
-Parallel benchmarks
-bash
-# Async pipelining, queue depth 2
-python3 benchmarks/parallel_benchmark.py \
-  --model model/face-detection-retail-0004.xml \
-  --device GPU --mode async --batch-size 1 \
-  --iterations 100 --workers 2
+Increasing the worker count beyond four did not provide additional benefits, suggesting that the system had reached its practical throughput limit.
 
-# Multiprocess, 4 workers
-python3 benchmarks/parallel_benchmark.py \
-  --model model/face-detection-retail-0004.xml \
-  --device GPU --mode multiprocess --batch-size 1 \
-  --iterations 50 --workers 4
-Plots and comparison
-bash
-python3 benchmarks/plot_results.py results/sweep_python.csv
-python3 benchmarks/plot_parallel.py results/parallel_results.csv
-python3 benchmarks/compare_models.py
-Results
-All measurements are on the hardware listed above, with 50 timed
-iterations after 10 warm-up iterations. Latency values are means
-over those iterations.
+### 3. Cross-Model Comparison — MobileNetV3-Large
 
-Finding 1 — Batching: the CPU collapses, the GPU holds
-Face-detection model ([N,3,300,300]):
+Model: `mobilenet-v3-large-1.0-224-tf`
 
-Batch	CPU latency	CPU thr	GPU latency	GPU thr	GPU speedup
-1	3.33 ms	301 img/s	3.42 ms	293 img/s	0.97x
-2	6.98 ms	287 img/s	6.49 ms	308 img/s	1.07x
-4	20.21 ms	198 img/s	11.49 ms	348 img/s	1.76x
-8	57.50 ms	139 img/s	24.76 ms	323 img/s	2.32x
-16	122.75 ms	130 img/s	53.28 ms	300 img/s	2.30x
-Key observation: CPU throughput peaks at batch=1 and declines
-as batch grows (301 → 130 img/s), while GPU throughput peaks at
-batch=4 (348 img/s) and stays roughly flat. The CPU's standard
-deviation also spikes at batch=8 (13.8 ms vs ~1 ms at smaller
-batches), indicating memory-bandwidth saturation, not just slowness.
-The GPU is both faster and more stable at large batches.
+Input shape: `[N, 3, 224, 224]`
 
-Finding 2 — Parallelism: multiprocess wins on throughput
-On the face-detection model at batch=1, three concurrency strategies:
+| Batch | CPU Throughput | GPU Throughput | GPU Speedup |
+|---:|---:|---:|---:|
+| 1 | 342 | 281 | 0.82× |
+| 2 | 408 | 304 | 0.74× |
+| 4 | 400 | 357 | 0.89× |
+| 8 | 330 | 289 | 0.87× |
+| 16 | 241 | 188 | 0.78× |
 
-Strategy	Workers	Throughput	Notes
-sync	1	269–290 img/s	baseline, lowest latency (~3.5 ms)
-async	2	332 img/s	best async depth; plateaus beyond 2
-async	4	317 img/s	no gain over depth 2
-async	8	318 img/s	no gain
-multiprocess	2	339 img/s	
-multiprocess	4	375 img/s	best overall throughput
-multiprocess	6	366 img/s	saturated
-multiprocess	8	364 img/s	saturated; no crash on 7 GB RAM
-Key observation: For aggregate throughput, multiprocess with
-4 workers wins (~375 img/s), beating both sync (~290) and async
-(~330). But per-request latency rises under concurrency — a
-trade-off to be aware of. Async pipelining yields only a modest
-~12% improvement over sync; the GPU is already reasonably
-saturated at batch=1 for this small model.
+*Throughput is measured in images/sec.*
 
-Finding 3 — The CPU/GPU winner depends on the model
-MobileNetV3-Large ([N,3,224,224]), same benchmark, same engine:
+**Observation:**
 
-Batch	CPU latency	CPU thr	GPU latency	GPU thr	GPU speedup
-1	2.93 ms	342 img/s	3.56 ms	281 img/s	0.82x
-2	4.90 ms	408 img/s	6.58 ms	304 img/s	0.74x
-4	10.00 ms	400 img/s	11.21 ms	357 img/s	0.89x
-8	24.21 ms	330 img/s	27.69 ms	289 img/s	0.87x
-16	66.38 ms	241 img/s	84.90 ms	188 img/s	0.78x
-Key observation: For MobileNetV3, the CPU wins at every batch
-size — the opposite of the face-detection result. The most likely
-explanation is architectural: MobileNetV3 is built on depthwise
-separable convolutions, which are memory-bound rather than
-compute-bound. The CPU's oneDNN kernels and AVX-512 paths handle
-these efficiently, while the integrated GPU gains little from its
-wider SIMD throughput when the bottleneck is memory access.
-Additionally, the model is shipped in FP16, and GPU-side FP16/FP32
-conversion overhead may also play a role.
+Unlike face detection, MobileNetV3 performed better on CPU at every tested batch size.
 
-Practical takeaway: "Is the GPU faster?" has no universal
-answer. Benchmark the specific model on the specific hardware
-before deciding. For lightweight, memory-bound networks on this
-laptop, CPU can be the better choice outright.
+This demonstrates why hardware acceleration must be evaluated against individual model architectures rather than assumed to provide universal improvements.
 
-Plots
-Generated plots (in results/plots/, not committed):
+### 4. INT8 Quantization — A Major CPU Performance Gain
 
-latency.png, throughput.png, speedup.png — face-detection
-batch-size sweep.
+MobileNetV3-Large was post-training quantized using NNCF.
 
-parallel_throughput.png, parallel_latency.png — sync / async /
-multiprocess scaling.
+| Batch | FP16 CPU | INT8 CPU | FP16 GPU | INT8 GPU |
+|---:|---:|---:|---:|---:|
+| 1 | 342 | 667 | 281 | 293 |
+| 2 | 409 | 805 | 304 | 407 |
+| 4 | 400 | 992 | 357 | 513 |
+| 8 | 330 | **1,077** | 289 | **719** |
 
-model_comparison.png — four-line throughput comparison
-(face-detection × CPU/GPU, MobileNet × CPU/GPU).
+*Throughput in images/sec.*
 
-Methodology notes
-Warm-up: 10 iterations before timing, to exclude first-call
-compilation and cache effects.
+**Key findings:**
 
-Timing: time.perf_counter() around each individual iteration,
-not around the whole loop, so per-iteration variance (std dev,
-P95, P99) is measurable.
+- INT8 significantly improves CPU inference throughput.
+- CPU throughput reaches 1,077 images/sec at batch size 8.
+- GPU throughput reaches 719 images/sec.
+- The optimal batch size changes with numerical precision.
+- INT8 provides a particularly substantial benefit on this CPU.
 
-Model input: random float32 tensors of the model's declared
-input shape. No real image preprocessing — this is a pure
-inference-throughput benchmark.
+**Important experimental limitation:**
 
-Parallel modes: async uses a pool of InferRequest objects
-with explicit round-robin submission and wait() on the oldest
-in-flight request; multiprocess uses multiprocessing with the
-spawn start method and a barrier so all workers begin their
-timed section simultaneously.
+The INT8 calibration used 100 random calibration samples. Accuracy was not measured. These results demonstrate throughput, not validated model-quality preservation.
 
-CSV schema: timestamp, model, device, mode, batch_size, workers, iterations, mean_ms, median_ms, std_ms, p95_ms, p99_ms, throughput_img_s, per_worker_ms.
-
-Limitations
-Single machine, single user. Background load, thermal
-throttling, and desktop compositing can all affect numbers by a
-few percent between runs.
-
-Synthetic inputs. No data loading or preprocessing is
-included; real pipelines will have lower effective throughput.
-
-FP16 model. MobileNetV3 was downloaded as FP16. A direct
-FP32 comparison, or INT8 quantization, has not been run yet.
-
-Shared memory. The GPU and CPU share the same 7 GB of RAM.
-Results will differ significantly on hardware with dedicated
-VRAM.
-
-Integrated GPU driver version. OpenVINO results depend on the
-installed Intel GPU driver stack; numbers may shift across driver
-versions.
-
-Roadmap
-☑ OpenVINO + Iris Xe validation
-☑ CPU vs GPU batch-size sweep (face-detection)
-☑ Reusable YAML-driven benchmark engine
-☑ Async and multiprocess parallel benchmarks
-☑ Cross-model comparison (face-detection vs MobileNetV3)
-□ Precision experiments (FP32 vs FP16 vs INT8)
-□ End-to-end batch image inference application
-□ Automated test suite (pytest)
-License
-MIT (add a LICENSE file before publishing).
+A production deployment requires representative calibration data and an accuracy comparison.
 
 ---
 
-### Finding 4 — INT8 quantization: CPU wins by a wider margin
+## 🖼️ Real-World Batch Image Inference
 
-MobileNetV3 was post-training quantized to INT8 with NNCF (100 random
-calibration samples — **throughput-only result, accuracy not measured**).
-The original model is FP16.
+This repository also includes an actual inference application rather than relying exclusively on synthetic benchmark inputs.
 
-| Batch | FP16 CPU | INT8 CPU | CPU gain | FP16 GPU | INT8 GPU | GPU gain | INT8 speedup (CPU/GPU) |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 342 img/s | **667 img/s** | 1.95x | 281 img/s | 293 img/s | 1.04x | 0.44x |
-| 2 | 409 img/s | **805 img/s** | 1.97x | 304 img/s | 407 img/s | 1.34x | 0.51x |
-| 4 | 400 img/s | **992 img/s** | 2.48x | 357 img/s | 513 img/s | 1.44x | 0.52x |
-| 8 | 330 img/s | **1077 img/s** | 3.26x | 289 img/s | 719 img/s | 2.49x | 0.67x |
+`app/batch_inference.py` provides:
 
-**Key observations:**
+- Folder-based image ingestion.
+- CPU and GPU inference.
+- Configurable batch processing.
+- Face detection using OpenVINO.
+- Bounding-box extraction and visualization.
+- Confidence threshold filtering.
+- Annotated image generation.
+- JSON inference reports.
 
-1. **INT8 is a dramatic win on CPU.** Peak throughput rises from
-   ~409 img/s (FP16) to **~1077 img/s** (INT8) at batch=8 — a **2.6x**
-   improvement. This is consistent with the CPU's VNNI instruction
-   support (AVX-512 VNNI), which accelerates INT8 matrix operations
-   natively.
+### Example Detection
 
-2. **The GPU also benefits from INT8, but less.** Peak GPU throughput
-   rises from ~357 img/s to ~719 img/s (2x). But because the CPU's
-   gain is larger, **the CPU's lead over the GPU widens with INT8** —
-   from ~0.8x in FP16 (GPU slightly behind) to 0.44–0.67x (CPU 1.5–2.3x
-   faster).
+<div align="center">
 
-3. **The optimal batch size shifts with precision.** FP16 peaked at
-   batch=2; INT8 peaks at batch=8. Lower memory pressure allows larger
-   batches to be productive.
+<img src="assets/example_detection.jpg" width="520" alt="Intel OpenVINO face detection example"/>
 
-4. **The INT8 model size is only modestly smaller** in this build
-   (10.95 MB → 9.56 MB), because the original model was already FP16
-   and many weights remained in 16-bit. The speedup comes from
-   activation quantization and VNNI execution, not solely from reduced
-   model size.
+*Face detection performed using OpenVINO on Intel Iris Xe GPU.*
 
-**Practical takeaway:** for this MobileNet-style workload on this
-laptop, **INT8 + CPU at batch=8 is by far the fastest configuration
-measured** — 1077 img/s, roughly 2.6x the best FP16 result and nearly
-4x the best GPU result. The Iris Xe's INT8 path is real but less
-mature than the CPU's on this hardware.
+</div>
 
-**Caveat:** calibration used random tensors, so this measures
-*throughput only*. A real deployment would require real calibration
-data and an accuracy comparison; those are not included here.
-
-
----
-
-## Application — batch image inference
-
-The benchmark engine is also usable as a real inference tool. `app/batch_inference.py`
-takes a folder of images, runs the face-detection model in batches on CPU or
-GPU, draws bounding boxes, and writes a JSON report.
-
-
-### Example output
-
-![Example detection](assets/example_detection.jpg)
-
-*A portrait run through `app/batch_inference.py` on the GPU. The green
-rectangle is the model's detected face; the label is the confidence score.*
-
-### Usage
+### Run the Application
 
 ```bash
 python3 app/batch_inference.py \
-  --input test_images \
-  --model model/face-detection-retail-0004.xml \
-  --device GPU \
-  --batch-size 4 \
-  --output output
-Arguments:
+    --input test_images \
+    --model model/face-detection-retail-0004.xml \
+    --device GPU \
+    --batch-size 4 \
+    --output output
+```
 
---input — folder of .jpg / .jpeg / .png / .bmp images
+### Generated Outputs
 
---model — OpenVINO IR .xml
-
---device — CPU or GPU
-
---batch-size — how many images per forward pass (last batch is padded)
-
---conf — confidence threshold (default 0.5)
-
---output — output directory
-
-Outputs
-text
+```text
 output/
-├── annotated_images/       # one annotated copy per input image
-└── report.json             # timing + per-image detections
-Example report.json for a single-image run on GPU:
+├── annotated_images/
+│   ├── face1.jpg
+│   ├── face2.jpg
+│   └── ...
+└── report.json
+```
 
-json
-{
-  "model": "face-detection-retail-0004.xml",
-  "device": "GPU",
-  "batch_size": 1,
-  "conf_threshold": 0.5,
-  "images_processed": 1,
-  "total_detections": 1,
-  "batches_run": 1,
-  "padded_batches": 0,
-  "total_inference_time_seconds": 0.004,
-  "mean_batch_latency_ms": 3.967,
-  "throughput_images_per_second": 252.08,
-  "per_image": [
-    {
-      "image": "face1.jpg",
-      "detections": 1,
-      "boxes": [
-        {"conf": 1.0, "xmin": 0.4198, "ymin": 0.1491,
-         "xmax": 0.7932, "ymax": 0.5658}
-      ]
-    }
-  ]
-}
-Box coordinates are normalized to [0, 1] relative to the original
-image size.
+The JSON report contains:
 
-A preprocessing gotcha worth recording
-The first version of the app produced zero detections (top confidence
-~0.05) on a clear portrait. The cause was preprocessing: the app was
-converting to RGB and dividing by 255 before inference. This model —
-face-detection-retail-0004 — expects BGR, raw 0–255, NCHW. Feeding
-it RGB [0,1] shifts the activation distribution enough to collapse the
-detector's confidence. After switching to BGR [0,255] with no
-normalization, the same image gave conf=1.0.
+- Number of processed images.
+- Total detections.
+- Batch execution statistics.
+- Mean batch latency.
+- Overall throughput.
+- Individual detection confidence scores.
+- Normalized bounding-box coordinates.
 
-This is a useful reminder that OpenVINO models have per-model
-preprocessing contracts. Always check the model's expected input format
-before blaming the hardware, the GPU driver, or OpenVINO itself.
+---
 
+## 🏗️ Project Architecture
+
+```text
+intel-iris-xe-inference-lab/
+│
+├── app/
+│   └── batch_inference.py
+│
+├── assets/
+│   └── example_detection.jpg
+│
+├── benchmarks/
+│   ├── run_benchmark.py
+│   ├── sweep.py
+│   ├── parallel_benchmark.py
+│   ├── plot_results.py
+│   ├── plot_parallel.py
+│   └── compare_models.py
+│
+├── config/
+│   └── benchmark_config.yaml
+│
+├── docs/
+│   └── lessons-learned.md
+│
+├── model/
+│   └── OpenVINO IR models
+│
+├── tests/
+│   └── pytest test suite
+│
+├── benchmarks/
+│   └── experimental benchmark scripts
+│
+├── Makefile
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
+
+*Generated benchmark results and downloaded model binaries are kept outside version control.*
+
+---
+
+## 🚀 Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/adnanphp/intel-iris-xe-inference-lab.git
+
+cd intel-iris-xe-inference-lab
+```
+
+### 2. Create a Virtual Environment
+
+```bash
+python3 -m venv .venv
+
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install --upgrade pip
+
+pip install -r requirements.txt
+```
+
+### 4. Verify OpenVINO Devices
+
+```bash
+python3 -c "import openvino as ov; print(ov.Core().available_devices)"
+```
+
+Expected output:
+
+```text
+['CPU', 'GPU']
+```
+
+The available devices depend on the installed Intel GPU driver and OpenVINO runtime configuration.
+
+---
+
+## 📦 Download Models
+
+The OpenVINO IR model files (`.xml` and `.bin`) are not committed to the repository.
+
+### Face Detection
+
+```bash
+cd model
+
+wget https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.xml
+
+wget https://storage.openvinotoolkit.org/repositories/open_model_zoo/2023.0/models_bin/1/face-detection-retail-0004/FP16/face-detection-retail-0004.bin
+```
+
+### MobileNetV3-Large
+
+```bash
+wget https://huggingface.co/OpenVINO/mobilenet_v3_large-fp16-ov/resolve/main/mobilenet_v3_large.xml \
+    -O mobilenet-v3-large-1.0-224-tf.xml
+
+wget https://huggingface.co/OpenVINO/mobilenet_v3_large-fp16-ov/resolve/main/mobilenet_v3_large.bin \
+    -O mobilenet-v3-large-1.0-224-tf.bin
+```
+
+Return to the repository root:
+
+```bash
+cd ..
+```
+
+---
+
+## 🧪 Running the Experiments
+
+### Single Benchmark
+
+```bash
+python3 benchmarks/run_benchmark.py \
+    --model model/face-detection-retail-0004.xml \
+    --device GPU \
+    --batch-size 8 \
+    --iterations 50 \
+    --input-shape 3,300,300 \
+    --csv results/benchmark_results.csv
+```
+
+### Batch-Size Sweep
+
+```bash
+python3 benchmarks/sweep.py \
+    --csv results/sweep_python.csv
+```
+
+### Asynchronous Inference
+
+```bash
+python3 benchmarks/parallel_benchmark.py \
+    --model model/face-detection-retail-0004.xml \
+    --device GPU \
+    --mode async \
+    --batch-size 1 \
+    --iterations 100 \
+    --workers 2
+```
+
+### Multiprocess Inference
+
+```bash
+python3 benchmarks/parallel_benchmark.py \
+    --model model/face-detection-retail-0004.xml \
+    --device GPU \
+    --mode multiprocess \
+    --batch-size 1 \
+    --iterations 50 \
+    --workers 4
+```
+
+### Generate Benchmark Visualizations
+
+```bash
+python3 benchmarks/plot_results.py results/sweep_python.csv
+
+python3 benchmarks/plot_parallel.py results/parallel_results.csv
+
+python3 benchmarks/compare_models.py
+```
+
+---
+
+## 📈 Performance Visualizations
+
+The benchmarking framework generates visualizations for comparing different execution configurations.
+
+| Visualization | Purpose |
+|---|---|
+| `latency.png` | CPU/GPU latency comparison |
+| `throughput.png` | Images processed per second |
+| `speedup.png` | Relative GPU performance |
+| `parallel_throughput.png` | Throughput under concurrency |
+| `parallel_latency.png` | Latency under concurrency |
+| `model_comparison.png` | Cross-model performance comparison |
+
+Generated plots are stored in `results/plots/`.
+
+---
+
+## 🔬 Benchmark Methodology
+
+To make performance comparisons meaningful, the experiments follow a consistent benchmarking procedure.
+
+| Parameter | Configuration |
+|---|---|
+| Warm-up iterations | 10 |
+| Timed iterations | 50 |
+| Timing mechanism | `time.perf_counter()` |
+| Input data | Synthetic float32 tensors |
+| Execution devices | CPU and GPU |
+| Batch sizes | 1, 2, 4, 8, 16 |
+| Concurrency | Synchronous, asynchronous, multiprocessing |
+| Performance metrics | Mean, median, standard deviation, P95, P99 |
+| Throughput | Images per second |
+
+### Measurement Considerations
+
+- Model compilation and initial execution are excluded through warm-up iterations.
+- Timing is measured per iteration.
+- Async execution uses multiple OpenVINO inference requests.
+- Multiprocessing uses the spawn method and a synchronization barrier.
+- CSV files preserve individual benchmark measurements for subsequent analysis.
+
+### Limitations
+
+The reported results should be interpreted within their experimental context.
+
+1. Experiments were performed on one laptop.
+2. Synthetic inputs exclude image loading and preprocessing overhead.
+3. Thermal throttling and background processes may affect measurements.
+4. Integrated graphics shares system memory with the CPU.
+5. INT8 calibration used random samples and did not include accuracy evaluation.
+6. Results depend on the installed Intel GPU driver and OpenVINO version.
+
+---
+
+## 🧩 Engineering Lessons Learned
+
+One particularly important debugging lesson came from the real-world face-detection application.
+
+The initial implementation produced almost no detections despite using a working model and GPU.
+
+The issue was not hardware acceleration.
+
+It was preprocessing.
+
+The model expected:
+
+```text
+Color format: BGR
+Pixel range: 0–255
+Tensor layout: NCHW
+```
+
+The original implementation supplied RGB images normalized to `[0, 1]`.
+
+After correcting the preprocessing pipeline to BGR with raw pixel values, the same image produced a detection confidence of 1.0.
+
+**Lesson:** Model preprocessing requirements are part of the inference contract. Incorrect preprocessing can invalidate an otherwise correctly configured inference pipeline.
+
+Additional findings and implementation notes are documented in:
+
+`docs/lessons-learned.md`
+
+---
+
+## 🗺️ Roadmap
+
+| Component | Status |
+|---|---|
+| OpenVINO runtime and Iris Xe validation | ✅ Completed |
+| CPU vs GPU benchmarking | ✅ Completed |
+| YAML-driven benchmark engine | ✅ Completed |
+| Batch-size optimization | ✅ Completed |
+| Async inference pipeline | ✅ Completed |
+| Multiprocess scaling | ✅ Completed |
+| Cross-model benchmarking | ✅ Completed |
+| FP16 vs INT8 experiments | ✅ Completed |
+| Batch image inference application | ✅ Completed |
+| Automated pytest suite | ✅ Implemented |
+| Performance visualization | ✅ Implemented |
+| Preprocessing documentation | ✅ Completed |
+| Representative-data INT8 accuracy evaluation | 🔄 Planned |
+| FP32 vs FP16 vs INT8 accuracy comparison | 🔄 Planned |
+| End-to-end pipeline profiling | 🔄 Planned |
+| Additional OpenVINO model architectures | 🔄 Planned |
+| Automated benchmark regression tracking | 🔄 Planned |
+
+---
+
+## 🛠️ Technology Stack
+
+<div align="center">
+
+| Category | Technologies |
+|---|---|
+| Programming | Python |
+| Inference Runtime | OpenVINO |
+| Hardware Acceleration | Intel Iris Xe |
+| Quantization | NNCF |
+| Numerical Computing | NumPy |
+| Visualization | Matplotlib |
+| Configuration | YAML |
+| Testing | Pytest |
+| Data Reporting | CSV, JSON |
+| Development Environment | Ubuntu Linux |
+
+</div>
+
+---
+
+## 🎓 What This Project Demonstrates
+
+This project demonstrates practical experience in:
+
+- Deep learning inference optimization.
+- Hardware-aware performance engineering.
+- CPU and integrated GPU acceleration.
+- OpenVINO model deployment.
+- Dynamic batch-size optimization.
+- Asynchronous execution and multiprocessing.
+- Post-training quantization experiments.
+- Model-specific performance analysis.
+- Benchmark design and reproducibility.
+- Real-world computer vision inference.
+- Automated testing and engineering documentation.
+
+The central objective is to understand not only how to execute deep learning models, but also how to measure, diagnose and optimize their performance under real hardware constraints.
+
+---
+
+## 📜 License
+
+This project is released under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+### ⭐ If you find this project useful, consider giving it a star!
+
+**Built with Python, OpenVINO and a genuine interest in hardware-aware AI engineering.**
+
+<br/>
+
+**Muhammad Adnan Shahzad**
+
+Machine Learning & AI Engineer | ML Researcher | Computer Vision
+
+[GitHub](https://github.com/adnanphp) · [LinkedIn](https://www.linkedin.com/in/adnanphy/)
+
+</div>
