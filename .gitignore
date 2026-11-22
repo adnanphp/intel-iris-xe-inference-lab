@@ -20,3 +20,7 @@ results/plots/*.png
 .idea/
 *.swp
 .DS_Store
+
+# Test images and app output
+test_images/
+output/

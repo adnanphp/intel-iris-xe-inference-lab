@@ -305,3 +305,82 @@ mature than the CPU's on this hardware.
 *throughput only*. A real deployment would require real calibration
 data and an accuracy comparison; those are not included here.
 
+
+---
+
+## Application — batch image inference
+
+The benchmark engine is also usable as a real inference tool. `app/batch_inference.py`
+takes a folder of images, runs the face-detection model in batches on CPU or
+GPU, draws bounding boxes, and writes a JSON report.
+
+### Usage
+
+```bash
+python3 app/batch_inference.py \
+  --input test_images \
+  --model model/face-detection-retail-0004.xml \
+  --device GPU \
+  --batch-size 4 \
+  --output output
+Arguments:
+
+--input — folder of .jpg / .jpeg / .png / .bmp images
+
+--model — OpenVINO IR .xml
+
+--device — CPU or GPU
+
+--batch-size — how many images per forward pass (last batch is padded)
+
+--conf — confidence threshold (default 0.5)
+
+--output — output directory
+
+Outputs
+text
+output/
+├── annotated_images/       # one annotated copy per input image
+└── report.json             # timing + per-image detections
+Example report.json for a single-image run on GPU:
+
+json
+{
+  "model": "face-detection-retail-0004.xml",
+  "device": "GPU",
+  "batch_size": 1,
+  "conf_threshold": 0.5,
+  "images_processed": 1,
+  "total_detections": 1,
+  "batches_run": 1,
+  "padded_batches": 0,
+  "total_inference_time_seconds": 0.004,
+  "mean_batch_latency_ms": 3.967,
+  "throughput_images_per_second": 252.08,
+  "per_image": [
+    {
+      "image": "face1.jpg",
+      "detections": 1,
+      "boxes": [
+        {"conf": 1.0, "xmin": 0.4198, "ymin": 0.1491,
+         "xmax": 0.7932, "ymax": 0.5658}
+      ]
+    }
+  ]
+}
+Box coordinates are normalized to [0, 1] relative to the original
+image size.
+
+A preprocessing gotcha worth recording
+The first version of the app produced zero detections (top confidence
+~0.05) on a clear portrait. The cause was preprocessing: the app was
+converting to RGB and dividing by 255 before inference. This model —
+face-detection-retail-0004 — expects BGR, raw 0–255, NCHW. Feeding
+it RGB [0,1] shifts the activation distribution enough to collapse the
+detector's confidence. After switching to BGR [0,255] with no
+normalization, the same image gave conf=1.0.
+
+This is a useful reminder that OpenVINO models have per-model
+preprocessing contracts. Always check the model's expected input format
+before blaming the hardware, the GPU driver, or OpenVINO itself.
+
