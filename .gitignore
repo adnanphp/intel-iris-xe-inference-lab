@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Model binaries (download separately — see README)
+model/*.xml
+model/*.bin
+model/*.h5
+model/public/
+
+# Results — reproducible, not committed
+results/*.csv
+results/plots/*.png
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
