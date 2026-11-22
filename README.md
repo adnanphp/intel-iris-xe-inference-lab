@@ -255,3 +255,53 @@ Roadmap
 □ Automated test suite (pytest)
 License
 MIT (add a LICENSE file before publishing).
+
+---
+
+### Finding 4 — INT8 quantization: CPU wins by a wider margin
+
+MobileNetV3 was post-training quantized to INT8 with NNCF (100 random
+calibration samples — **throughput-only result, accuracy not measured**).
+The original model is FP16.
+
+| Batch | FP16 CPU | INT8 CPU | CPU gain | FP16 GPU | INT8 GPU | GPU gain | INT8 speedup (CPU/GPU) |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 342 img/s | **667 img/s** | 1.95x | 281 img/s | 293 img/s | 1.04x | 0.44x |
+| 2 | 409 img/s | **805 img/s** | 1.97x | 304 img/s | 407 img/s | 1.34x | 0.51x |
+| 4 | 400 img/s | **992 img/s** | 2.48x | 357 img/s | 513 img/s | 1.44x | 0.52x |
+| 8 | 330 img/s | **1077 img/s** | 3.26x | 289 img/s | 719 img/s | 2.49x | 0.67x |
+
+**Key observations:**
+
+1. **INT8 is a dramatic win on CPU.** Peak throughput rises from
+   ~409 img/s (FP16) to **~1077 img/s** (INT8) at batch=8 — a **2.6x**
+   improvement. This is consistent with the CPU's VNNI instruction
+   support (AVX-512 VNNI), which accelerates INT8 matrix operations
+   natively.
+
+2. **The GPU also benefits from INT8, but less.** Peak GPU throughput
+   rises from ~357 img/s to ~719 img/s (2x). But because the CPU's
+   gain is larger, **the CPU's lead over the GPU widens with INT8** —
+   from ~0.8x in FP16 (GPU slightly behind) to 0.44–0.67x (CPU 1.5–2.3x
+   faster).
+
+3. **The optimal batch size shifts with precision.** FP16 peaked at
+   batch=2; INT8 peaks at batch=8. Lower memory pressure allows larger
+   batches to be productive.
+
+4. **The INT8 model size is only modestly smaller** in this build
+   (10.95 MB → 9.56 MB), because the original model was already FP16
+   and many weights remained in 16-bit. The speedup comes from
+   activation quantization and VNNI execution, not solely from reduced
+   model size.
+
+**Practical takeaway:** for this MobileNet-style workload on this
+laptop, **INT8 + CPU at batch=8 is by far the fastest configuration
+measured** — 1077 img/s, roughly 2.6x the best FP16 result and nearly
+4x the best GPU result. The Iris Xe's INT8 path is real but less
+mature than the CPU's on this hardware.
+
+**Caveat:** calibration used random tensors, so this measures
+*throughput only*. A real deployment would require real calibration
+data and an accuracy comparison; those are not included here.
+

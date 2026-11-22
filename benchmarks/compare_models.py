@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compare benchmark results across models.
+Compare benchmark results across models and precisions.
 
 Reads multiple result CSVs, deduplicates to the latest row per
 (model, device, batch_size), and prints a comparison table with
@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 
 
 def load_csv(path):
-    """Return list of dicts with typed fields, or [] if file missing."""
     if not os.path.isfile(path):
         print(f"Warning: missing {path}", file=sys.stderr)
         return []
@@ -40,7 +39,6 @@ def load_csv(path):
 
 
 def dedupe_latest(rows):
-    """Keep the latest entry per (model, device, batch)."""
     latest = {}
     for r in rows:
         latest[(r["model"], r["device"], r["batch"])] = r
@@ -48,7 +46,6 @@ def dedupe_latest(rows):
 
 
 def short_name(model_filename):
-    """Turn 'face-detection-retail-0004.xml' -> 'face-detection'."""
     name = model_filename.rsplit(".", 1)[0]
     for suffix in ("-retail-0004", "-1.0-224-tf"):
         name = name.replace(suffix, "")
@@ -56,7 +53,6 @@ def short_name(model_filename):
 
 
 def build_table(rows):
-    """Structure: {model: {batch: {device: row}}}"""
     table = defaultdict(lambda: defaultdict(dict))
     for r in rows:
         table[short_name(r["model"])][r["batch"]][r["device"]] = r
@@ -96,16 +92,14 @@ def print_table(table):
 
 def plot(table, outdir):
     os.makedirs(outdir, exist_ok=True)
-    plt.figure(figsize=(9, 6))
+    plt.figure(figsize=(10, 6))
 
-    styles = {
-        ("CPU", "face-detection"): ("tab:blue", "o", "-"),
-        ("GPU", "face-detection"): ("tab:blue", "s", "--"),
-        ("CPU", "mobilenet-v3-large"): ("tab:orange", "o", "-"),
-        ("GPU", "mobilenet-v3-large"): ("tab:orange", "s", "--"),
-    }
+    # Assign a distinct color per model; device determines line style.
+    palette = plt.get_cmap("tab10").colors
+    models = sorted(table)
+    model_colors = {m: palette[i % len(palette)] for i, m in enumerate(models)}
 
-    for model in sorted(table):
+    for model in models:
         for device in ("CPU", "GPU"):
             pts = sorted(
                 (b, table[model][b][device]["throughput"])
@@ -116,15 +110,19 @@ def plot(table, outdir):
                 continue
             xs = [p[0] for p in pts]
             ys = [p[1] for p in pts]
-            color, marker, linestyle = styles.get(
-                (device, model), ("gray", "o", "-"))
-            plt.plot(xs, ys, marker=marker, linestyle=linestyle,
-                     color=color, label=f"{model} / {device}")
+            linestyle = "-" if device == "CPU" else "--"
+            marker = "o" if device == "CPU" else "s"
+            plt.plot(
+                xs, ys,
+                marker=marker, linestyle=linestyle,
+                color=model_colors[model],
+                label=f"{model} / {device}",
+            )
 
     plt.xlabel("Batch size")
     plt.ylabel("Throughput (images/sec)")
-    plt.title("Throughput vs batch size: CPU vs GPU across two models")
-    plt.legend()
+    plt.title("Throughput vs batch size: CPU vs GPU across models and precisions")
+    plt.legend(fontsize=8)
     plt.grid(True, alpha=0.3)
     path = os.path.join(outdir, "model_comparison.png")
     plt.savefig(path, dpi=120, bbox_inches="tight")
@@ -144,13 +142,11 @@ def main():
     rows = []
     for path in args.csv:
         rows.extend(load_csv(path))
-
     if not rows:
         sys.exit("No data loaded — check that the CSV paths exist.")
 
     rows = dedupe_latest(rows)
     table = build_table(rows)
-
     print_table(table)
     plot(table, args.outdir)
 
