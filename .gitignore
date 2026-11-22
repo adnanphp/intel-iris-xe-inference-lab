@@ -24,3 +24,4 @@ results/plots/*.png
 # Test images and app output
 test_images/
 output/
+data/val_labels.txt
