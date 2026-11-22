@@ -58,7 +58,7 @@ Rather than assuming GPU acceleration is always beneficial, the experiments comp
 | Batch optimization | Batch sizes 1, 2, 4, 8 and 16 |
 | Async inference | Multiple concurrent inference requests |
 | Multiprocessing | Scaling inference across worker processes |
-| Quantization | FP16 vs INT8 performance |
+| Quantization | FP16 vs INT8 throughput **and accuracy** |
 | Model architecture | Face Detection vs MobileNetV3 |
 | Practical deployment | Batch image inference with bounding boxes |
 | Performance analysis | Latency, throughput, P95, P99 and speedup |
@@ -73,12 +73,13 @@ The experiments revealed several interesting characteristics of integrated GPU i
 
 | 🚀 Metric | Experimental Result |
 |---|---:|
-| Best GPU speedup | **2.32×** |
-| Best GPU throughput | **348 images/sec** |
-| Best overall throughput | **375 images/sec** |
-| Best INT8 CPU throughput | **1,077 images/sec** |
-| Best INT8 GPU throughput | **719 images/sec** |
-| Best multiprocessing configuration | **4 workers** |
+| Best GPU speedup (face detection) | **2.32×** |
+| Best GPU throughput (face detection) | **348 images/sec** |
+| Best multiprocessing throughput | **375 images/sec** |
+| Best INT8 CPU throughput (MobileNetV3) | **754 images/sec** |
+| Best INT8 GPU throughput (MobileNetV3) | **541 images/sec** |
+| INT8 accuracy cost (real calibration) | **−2.0 pts Top-1** |
+| INT8 speedup vs FP16 (CPU, batch=8) | **2.28×** |
 
 </div>
 
@@ -98,9 +99,9 @@ Four GPU worker processes achieved approximately 375 images/sec, outperforming t
 
 MobileNetV3-Large performed better on CPU than GPU across all tested batch sizes.
 
-**4. INT8 quantization significantly improves CPU inference**
+**4. INT8 quantization delivers a strong speed/accuracy trade-off**
 
-MobileNetV3 INT8 achieved 1,077 images/sec on CPU at batch size 8.
+Real-calibration INT8 achieved **2.28× CPU throughput** at a cost of **2.0 percentage points** of Top-1 accuracy on MobileNetV3 (90.2% → 88.2%). Random calibration produced a faster but functionally broken model (4.6% Top-1) — a cautionary demonstration of why calibration data matters.
 
 **5. Hardware-aware optimization matters**
 
@@ -204,32 +205,37 @@ Unlike face detection, MobileNetV3 performed better on CPU at every tested batch
 
 This demonstrates why hardware acceleration must be evaluated against individual model architectures rather than assumed to provide universal improvements.
 
-### 4. INT8 Quantization — A Major CPU Performance Gain
+### 4. INT8 Quantization — Speed and Accuracy
 
-MobileNetV3-Large was post-training quantized using NNCF.
+MobileNetV3-Large was post-training quantized to INT8 using NNCF with **200 real calibration images** from the Imagenette training set. The FP16 baseline and both INT8 variants were evaluated on 500 validation images from the Imagenette validation set (10 classes mapped to their ImageNet-1k indices).
 
-| Batch | FP16 CPU | INT8 CPU | FP16 GPU | INT8 GPU |
-|---:|---:|---:|---:|---:|
-| 1 | 342 | 667 | 281 | 293 |
-| 2 | 409 | 805 | 304 | 407 |
-| 4 | 400 | 992 | 357 | 513 |
-| 8 | 330 | **1,077** | 289 | **719** |
+#### Accuracy
+
+| Model | Top-1 | Top-5 | Δ Top-1 vs FP16 |
+|---|---:|---:|---:|
+| FP16 | **90.20%** | 98.00% | baseline |
+| INT8 (real calibration) | **88.20%** | 96.40% | **−2.00 pts** |
+| INT8 (random calibration) | **4.60%** | 9.40% | **−85.60 pts** |
+
+#### Throughput (real-calibration INT8)
+
+| Batch | FP16 CPU | INT8 CPU | CPU speedup | FP16 GPU | INT8 GPU | GPU speedup |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 342 | 462 | 1.35× | 281 | 179 | 0.64× |
+| 2 | 409 | 575 | 1.41× | 304 | 269 | 0.88× |
+| 4 | 400 | 690 | 1.73× | 357 | 410 | 1.15× |
+| 8 | 330 | **754** | **2.28×** | 289 | 541 | 1.87× |
 
 *Throughput in images/sec.*
 
 **Key findings:**
 
-- INT8 significantly improves CPU inference throughput.
-- CPU throughput reaches 1,077 images/sec at batch size 8.
-- GPU throughput reaches 719 images/sec.
-- The optimal batch size changes with numerical precision.
-- INT8 provides a particularly substantial benefit on this CPU.
+- **Real-calibration INT8 preserves accuracy**: 90.2% → 88.2% Top-1 (−2.0 percentage points) while delivering a **2.28× CPU throughput speedup** at batch=8. This is an excellent production trade-off.
+- **Random calibration destroys the model**: the same quantization procedure with random calibration tensors collapsed Top-1 accuracy from 90.2% to **4.6%** — barely above chance. The random-calibration model was *faster* (1,077 img/s) but produced meaningless predictions.
+- **Calibration data is the critical variable** in post-training quantization. Throughput measured on a model that was never validated for accuracy is misleading.
+- **CPU remains the winner for MobileNetV3 even under INT8**: the CPU is 1.4–2.6× faster than the GPU across all batch sizes, reinforcing the architectural finding from Section 3.
 
-**Important experimental limitation:**
-
-The INT8 calibration used 100 random calibration samples. Accuracy was not measured. These results demonstrate throughput, not validated model-quality preservation.
-
-A production deployment requires representative calibration data and an accuracy comparison.
+**Methodology note:** Calibration used 200 images from the Imagenette *training* set; accuracy was evaluated on 500 images from the Imagenette *validation* set. Input preprocessing: RGB, normalized to `[-1, 1]` via `(x − 127.5) / 127.5` — matching the Hugging Face IR model's expected contract. Full details in [`docs/precision-study.md`](docs/precision-study.md).
 
 ---
 
@@ -307,6 +313,9 @@ intel-iris-xe-inference-lab/
 │   ├── run_benchmark.py
 │   ├── sweep.py
 │   ├── parallel_benchmark.py
+│   ├── quantize_model.py
+│   ├── quantize_model_real.py
+│   ├── evaluate_accuracy.py
 │   ├── plot_results.py
 │   ├── plot_parallel.py
 │   └── compare_models.py
@@ -314,8 +323,13 @@ intel-iris-xe-inference-lab/
 ├── config/
 │   └── benchmark_config.yaml
 │
+├── data/
+│   ├── imagenette_to_imagenet.py
+│   └── prepare_imagenette.py
+│
 ├── docs/
-│   └── lessons-learned.md
+│   ├── lessons-learned.md
+│   └── precision-study.md
 │
 ├── model/
 │   └── OpenVINO IR models
@@ -323,18 +337,13 @@ intel-iris-xe-inference-lab/
 ├── tests/
 │   └── pytest test suite
 │
-├── benchmarks/
-│   └── experimental benchmark scripts
-│
 ├── Makefile
 ├── requirements.txt
 ├── LICENSE
 └── README.md
 ```
 
-*Generated benchmark results and downloaded model binaries are kept outside version control.*
-
----
+Generated benchmark results, downloaded model binaries, and datasets are kept outside version control.
 
 ## 🚀 Installation
 
@@ -376,11 +385,9 @@ Expected output:
 
 The available devices depend on the installed Intel GPU driver and OpenVINO runtime configuration.
 
----
-
 ## 📦 Download Models
 
-The OpenVINO IR model files (`.xml` and `.bin`) are not committed to the repository.
+The OpenVINO IR model files (.xml and .bin) are not committed to the repository.
 
 ### Face Detection
 
@@ -408,7 +415,29 @@ Return to the repository root:
 cd ..
 ```
 
----
+## 📊 Dataset for Accuracy Evaluation
+
+INT8 accuracy evaluation uses Imagenette (fast.ai's 10-class ImageNet subset).
+
+```bash
+mkdir -p data
+cd data
+
+wget https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz
+
+tar xzf imagenette2-160.tgz
+
+cd ..
+```
+
+```bash
+# Prepare 200 calibration images + validation labels
+python3 data/prepare_imagenette.py
+```
+
+This produces `data/calibration_images/` (200 PNGs) and `data/val_labels.txt` (~3,900 labeled validation entries).
+
+Datasets are kept out of version control.
 
 ## 🧪 Running the Experiments
 
@@ -455,6 +484,26 @@ python3 benchmarks/parallel_benchmark.py \
     --workers 4
 ```
 
+### INT8 Quantization (Real Calibration)
+
+```bash
+python3 benchmarks/quantize_model_real.py \
+    --model model/mobilenet-v3-large-1.0-224-tf.xml \
+    --output model/mobilenet-v3-large-int8-real.xml \
+    --calib-dir data/calibration_images \
+    --calib-count 200
+```
+
+### Accuracy Evaluation
+
+```bash
+python3 benchmarks/evaluate_accuracy.py \
+    --model model/mobilenet-v3-large-int8-real.xml \
+    --labels data/val_labels.txt \
+    --device CPU \
+    --limit 500
+```
+
 ### Generate Benchmark Visualizations
 
 ```bash
@@ -465,24 +514,20 @@ python3 benchmarks/plot_parallel.py results/parallel_results.csv
 python3 benchmarks/compare_models.py
 ```
 
----
-
 ## 📈 Performance Visualizations
 
 The benchmarking framework generates visualizations for comparing different execution configurations.
 
 | Visualization | Purpose |
 |---|---|
-| `latency.png` | CPU/GPU latency comparison |
-| `throughput.png` | Images processed per second |
-| `speedup.png` | Relative GPU performance |
-| `parallel_throughput.png` | Throughput under concurrency |
-| `parallel_latency.png` | Latency under concurrency |
-| `model_comparison.png` | Cross-model performance comparison |
+| latency.png | CPU/GPU latency comparison |
+| throughput.png | Images processed per second |
+| speedup.png | Relative GPU performance |
+| parallel_throughput.png | Throughput under concurrency |
+| parallel_latency.png | Latency under concurrency |
+| model_comparison.png | Cross-model performance comparison |
 
 Generated plots are stored in `results/plots/`.
-
----
 
 ## 🔬 Benchmark Methodology
 
@@ -499,27 +544,36 @@ To make performance comparisons meaningful, the experiments follow a consistent 
 | Concurrency | Synchronous, asynchronous, multiprocessing |
 | Performance metrics | Mean, median, standard deviation, P95, P99 |
 | Throughput | Images per second |
+| INT8 calibration | 200 real images (Imagenette training set) |
+| INT8 accuracy evaluation | 500 Imagenette validation images |
 
 ### Measurement Considerations
 
-- Model compilation and initial execution are excluded through warm-up iterations.
-- Timing is measured per iteration.
-- Async execution uses multiple OpenVINO inference requests.
-- Multiprocessing uses the spawn method and a synchronization barrier.
-- CSV files preserve individual benchmark measurements for subsequent analysis.
+Model compilation and initial execution are excluded through warm-up iterations.
+
+Timing is measured per iteration.
+
+Async execution uses multiple OpenVINO inference requests.
+
+Multiprocessing uses the spawn method and a synchronization barrier.
+
+CSV files preserve individual benchmark measurements for subsequent analysis.
 
 ### Limitations
 
 The reported results should be interpreted within their experimental context.
 
-1. Experiments were performed on one laptop.
-2. Synthetic inputs exclude image loading and preprocessing overhead.
-3. Thermal throttling and background processes may affect measurements.
-4. Integrated graphics shares system memory with the CPU.
-5. INT8 calibration used random samples and did not include accuracy evaluation.
-6. Results depend on the installed Intel GPU driver and OpenVINO version.
+Experiments were performed on one laptop.
 
----
+Synthetic inputs exclude image loading and preprocessing overhead.
+
+Thermal throttling and background processes may affect measurements.
+
+Integrated graphics shares system memory with the CPU.
+
+INT8 accuracy was measured on Imagenette (10 of the 1000 ImageNet classes) using 500 validation images. The absolute Top-1 numbers are therefore class-subset-specific; the FP16→INT8 delta is the meaningful result. Full ImageNet-1k validation was not run.
+
+Results depend on the installed Intel GPU driver and OpenVINO version.
 
 ## 🧩 Engineering Lessons Learned
 
@@ -539,17 +593,19 @@ Pixel range: 0–255
 Tensor layout: NCHW
 ```
 
-The original implementation supplied RGB images normalized to `[0, 1]`.
+The original implementation supplied RGB images normalized to [0, 1].
 
 After correcting the preprocessing pipeline to BGR with raw pixel values, the same image produced a detection confidence of 1.0.
 
 **Lesson:** Model preprocessing requirements are part of the inference contract. Incorrect preprocessing can invalidate an otherwise correctly configured inference pipeline.
 
+A second lesson came from the INT8 study: throughput on a model that was never validated for accuracy is not a result. Random-calibration INT8 ran faster than real-calibration INT8 and produced meaningless predictions. Accuracy evaluation is part of the benchmark, not an optional extra.
+
 Additional findings and implementation notes are documented in:
 
 `docs/lessons-learned.md`
 
----
+`docs/precision-study.md`
 
 ## 🗺️ Roadmap
 
@@ -562,18 +618,16 @@ Additional findings and implementation notes are documented in:
 | Async inference pipeline | ✅ Completed |
 | Multiprocess scaling | ✅ Completed |
 | Cross-model benchmarking | ✅ Completed |
-| FP16 vs INT8 experiments | ✅ Completed |
+| FP16 vs INT8 throughput experiments | ✅ Completed |
 | Batch image inference application | ✅ Completed |
 | Automated pytest suite | ✅ Implemented |
 | Performance visualization | ✅ Implemented |
 | Preprocessing documentation | ✅ Completed |
-| Representative-data INT8 accuracy evaluation | 🔄 Planned |
+| Representative-data INT8 accuracy evaluation | ✅ Completed |
 | FP32 vs FP16 vs INT8 accuracy comparison | 🔄 Planned |
 | End-to-end pipeline profiling | 🔄 Planned |
 | Additional OpenVINO model architectures | 🔄 Planned |
 | Automated benchmark regression tracking | 🔄 Planned |
-
----
 
 ## 🛠️ Technology Stack
 
@@ -594,43 +648,45 @@ Additional findings and implementation notes are documented in:
 
 </div>
 
----
-
 ## 🎓 What This Project Demonstrates
 
 This project demonstrates practical experience in:
 
-- Deep learning inference optimization.
-- Hardware-aware performance engineering.
-- CPU and integrated GPU acceleration.
-- OpenVINO model deployment.
-- Dynamic batch-size optimization.
-- Asynchronous execution and multiprocessing.
-- Post-training quantization experiments.
-- Model-specific performance analysis.
-- Benchmark design and reproducibility.
-- Real-world computer vision inference.
-- Automated testing and engineering documentation.
+Deep learning inference optimization.
+
+Hardware-aware performance engineering.
+
+CPU and integrated GPU acceleration.
+
+OpenVINO model deployment.
+
+Dynamic batch-size optimization.
+
+Asynchronous execution and multiprocessing.
+
+Post-training quantization with accuracy-aware evaluation.
+
+Model-specific performance analysis.
+
+Benchmark design and reproducibility.
+
+Real-world computer vision inference.
+
+Automated testing and engineering documentation.
 
 The central objective is to understand not only how to execute deep learning models, but also how to measure, diagnose and optimize their performance under real hardware constraints.
 
----
-
 ## 📜 License
 
-This project is released under the [MIT License](LICENSE).
-
----
+This project is released under the MIT License.
 
 <div align="center">
 
-### ⭐ If you find this project useful, consider giving it a star!
+⭐ If you find this project useful, consider giving it a star!
 
-**Built with Python, OpenVINO and a genuine interest in hardware-aware AI engineering.**
+Built with Python, OpenVINO and a genuine interest in hardware-aware AI engineering.
 
-<br/>
-
-****
+**Muhammad Adnan Shahzad**
 
 Machine Learning & AI Engineer | ML Researcher | Computer Vision
 
