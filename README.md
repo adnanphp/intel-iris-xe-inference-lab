@@ -1,5 +1,10 @@
 # Intel Iris Xe Inference Lab
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![OpenVINO](https://img.shields.io/badge/OpenVINO-2024.6-0a7aff.svg)](https://docs.openvino.ai/)
+[![Platform](https://img.shields.io/badge/platform-Intel%20Iris%20Xe-0071c5.svg)](#hardware)
+
 Benchmarking and optimizing deep learning inference on Intel Iris Xe
 integrated graphics with OpenVINO — CPU vs GPU, batch sizes, async
 pipelining, multiprocess scaling, and cross-model comparison.
@@ -313,6 +318,14 @@ data and an accuracy comparison; those are not included here.
 The benchmark engine is also usable as a real inference tool. `app/batch_inference.py`
 takes a folder of images, runs the face-detection model in batches on CPU or
 GPU, draws bounding boxes, and writes a JSON report.
+
+
+### Example output
+
+![Example detection](assets/example_detection.jpg)
+
+*A portrait run through `app/batch_inference.py` on the GPU. The green
+rectangle is the model's detected face; the label is the confidence score.*
 
 ### Usage
 
