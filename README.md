@@ -630,7 +630,7 @@ This project is released under the [MIT License](LICENSE).
 
 <br/>
 
-**Muhammad Adnan Shahzad**
+****
 
 Machine Learning & AI Engineer | ML Researcher | Computer Vision
 
