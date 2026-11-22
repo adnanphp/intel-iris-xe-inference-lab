@@ -25,3 +25,9 @@ results/plots/*.png
 test_images/
 output/
 data/val_labels.txt
+
+# Datasets and calibration images
+data/imagenette2-160/
+data/imagenette2-160.tgz
+data/calibration_images/
+data/val_labels.txt
